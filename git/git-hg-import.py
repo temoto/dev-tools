@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/env python3
 __author__ = 'Sergey Shepelev <temotor@gmail.com>'
 __version__ = '1'
 import argparse
@@ -10,12 +10,21 @@ import sys
 
 
 cmdline = argparse.ArgumentParser()
-cmdline.add_argument('-git', type=str, default='.')
 cmdline.add_argument('-edit', action='store_true', dest='edit', default=False)
+cmdline.add_argument('-git', type=str, default='.')
 cmdline.add_argument('-pick', action='store_true', dest='pick', default=False)
-cmdline.add_argument('-v', action='store_const', const=logging.DEBUG,
-                     dest='log_level', default=logging.INFO)
-cmdline.add_argument('commit', type=str)
+cmdline.add_argument(
+    '-no-reverse', action='store_true', dest='log_forward', default=False,
+    help='Keep commit order. Default is to reverse output of git log before generating HG changesets',
+)
+cmdline.add_argument(
+    '-v', action='store_const', const=logging.DEBUG, dest='log_level', default=logging.INFO,
+    help='Output debug information to stderr',
+)
+cmdline.add_argument(
+    'revision_range', type=str, default='HEAD', nargs='?', metavar='<revision range>',
+    help='See man git log. Examples: master~5, master..branch',
+)
 
 log = logging.getLogger('git-hg-import')
 
@@ -88,16 +97,16 @@ def run_git(cmd, **kwargs):
 
 
 def git_log(c):
-    output = run_git('log --format="%h\t%an\t%s" {commit} --', commit=c)
+    output = run_git('log --format="%ai\t%h\t%an\t%s" {commit} --', commit=c)
     log.info('\n%s', output.rstrip())
 
     entries = []
     for line in output.splitlines():
-        parts = line.split('\t', 2)
+        parts = line.split('\t', 3)
         entries.append(Commit(
-            id=parts[0],
-            author=parts[1],
-            message=parts[2],
+            id=parts[1],
+            author=parts[2],
+            message=parts[3],
         ))
     return entries
 
@@ -148,7 +157,10 @@ def main():
     if not os.path.isdir(flags.git):
         die('git directory does not exist: {flags.git}')
 
-    log_entries = git_log(flags.commit)
+    log_entries = git_log(flags.revision_range)
+    if not flags.log_forward:
+        log_entries = reversed(log_entries)
+        log.debug('reversing')
     picked_commits = pick(log_entries)
 
     for short_commit in picked_commits:
