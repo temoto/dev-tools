@@ -1,0 +1,14 @@
+#!/bin/bash
+set -e
+
+onto=origin/master
+
+git fetch --prune
+git branch --remotes --list 'origin/*' |grep -vE 'HEAD|master|gh-pages' |cut -d/ -f2 |while read -r b; do
+  printf "\nRebasing $b\n\n"
+  git checkout -B $b origin/$b
+  git rebase $onto && continue
+  git rebase --abort
+  git reset
+  git checkout .
+done
