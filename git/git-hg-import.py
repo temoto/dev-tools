@@ -12,6 +12,10 @@ import sys
 cmdline = argparse.ArgumentParser()
 cmdline.add_argument('-edit', action='store_true', dest='edit', default=False)
 cmdline.add_argument('-git', type=str, default='.')
+cmdline.add_argument(
+    '-n', type=int, dest='max_count', default=-1, metavar='N',
+    help='Include at most N commits from log',
+)
 cmdline.add_argument('-pick', action='store_true', dest='pick', default=False)
 cmdline.add_argument(
     '-no-reverse', action='store_true', dest='log_forward', default=False,
@@ -97,7 +101,10 @@ def run_git(cmd, **kwargs):
 
 
 def git_log(c):
-    output = run_git('log --format="%ai\t%h\t%an\t%s" {commit} --', commit=c)
+    output = run_git(
+        'log --format="%ai\t%h\t%an\t%s" {commit} --',
+        commit=c,
+    )
     log.info('\n%s', output.rstrip())
 
     entries = []
@@ -143,7 +150,14 @@ def hg_format(commit):
 '''.lstrip().format(c=commit)
 
 
-def pick(entries):
+def pick(entries, flags):
+    if not flags.log_forward:
+        log.debug('reversing')
+        entries = tuple(reversed(entries))
+
+    if flags.max_count != -1:
+        entries = entries[:flags.max_count]
+
     if flags.pick:
         raise NotImplementedError('pick')
     return entries
@@ -158,10 +172,7 @@ def main():
         die('git directory does not exist: {flags.git}')
 
     log_entries = git_log(flags.revision_range)
-    if not flags.log_forward:
-        log_entries = reversed(log_entries)
-        log.debug('reversing')
-    picked_commits = pick(log_entries)
+    picked_commits = pick(log_entries, flags)
 
     for short_commit in picked_commits:
         commit = git_show(short_commit.id)
